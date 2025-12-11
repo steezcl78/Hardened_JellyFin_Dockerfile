@@ -1,84 +1,81 @@
 # IT610 Midterm Project: Hardened Jellyfin Container
 
-A security-hardened, performance-optimized Jellyfin Docker container with NVIDIA GPU support.
+A **security-hardened** Jellyfin Docker container that addresses security weaknesses in the official Jellyfin Docker image, with optional NVIDIA GPU acceleration.
 
-## Features
+## Project Rationale
 
-1. **Non-root user execution** - Container runs as unprivileged `jellyfin` user (UID/GID 1000)
-2. **NVIDIA GPU hardware acceleration** - Configured for NVENC/NVDEC transcoding
-3. **Separated cache volumes** - Transcode and metadata caches isolated for performance
-4. **Extra codecs** - Comprehensive codec and library support for home media
+The official Jellyfin Docker container runs as root by default and lacks proper security isolation. This project implements Systems Administration security best practices while maintaining full Jellyfin functionality.
 
-## Codec & Format Support
+## Security Hardening Features
 
-### Video Codecs
-- **H.264/AVC** - libx264 (most compatible)
-- **H.265/HEVC** - libx265 (4K, HDR content)
-- **AV1** - libdav1d, libaom (next-gen, efficient)
-- **VP9** - libvpx (YouTube, WebM)
-- **Theora** - libtheora (legacy open format)
+1. **Non-root user execution** - Container runs as unprivileged `jellyfin` user (UID/GID 1000) instead of root
+2. **Read-only media mount** - Media library mounted read-only to prevent modification or tampering
+3. **Separated cache volumes** - Config, cache, transcode, and metadata isolated for security and performance
+4. **Minimal attack surface** - Only essential packages installed beyond base image
+5. **Proper file permissions** - All directories have appropriate ownership and permissions set at build time
+6. **Configurable UID/GID** - User namespace mapping configurable to match host user permissions
 
-### Audio Codecs
-- **AAC** - libfdk-aac (high quality)
-- **MP3** - libmp3lame
-- **Opus** - libopus (modern, efficient)
-- **Vorbis** - libvorbis (OGG container)
+## Additional Features
 
-### HDR & Advanced Features
-- **HDR10/HDR10+** - via HEVC/AV1 support
-- **Dolby Vision** - passthrough support
-- **Tone mapping** - OpenCL for HDR to SDR conversion
-- **Vulkan** - modern GPU acceleration pipeline
-
-### Subtitles & Fonts
-- **ASS/SSA** - styled subtitles via libass
-- **SRT, VTT** - standard subtitle formats
-- **CJK fonts** - Noto CJK for Asian language support
-- **Burn-in** - FreeType, HarfBuzz, Fribidi
-
-### Physical Media
-- **BluRay** - libbluray for disc rips
-- **DVD** - standard container support
-
-### Image Formats (thumbnails, album art)
-- WebP, JPEG, PNG
+- **Comprehensive codec support** - H.264, HEVC/H.265, AV1, VP9, HDR10+, Dolby Vision, and subtitle rendering
+- **Optional NVIDIA GPU acceleration** - Hardware transcoding for systems with NVIDIA GPUs (not required)
+- **Cross-platform compatibility** - Runs on Linux, macOS, and Windows
 
 ## Prerequisites
 
-- Docker Desktop with Docker Compose
+### Required
+- Docker Desktop with Docker Compose (v2.0 or newer)
+
+### Optional (for GPU acceleration only)
 - NVIDIA GPU (Maxwell architecture or newer)
 - NVIDIA drivers (v522.25 or newer)
-- NVIDIA Container Toolkit installed on host
+- NVIDIA Container Toolkit
 
-## Usage
+**Note**: GPU support is completely optional. The container runs perfectly fine with CPU-only transcoding.
 
-### Build and Run
+## Quick Start
 
 ```bash
 # Build the hardened image
 docker compose build
 
-# Start the container
-docker compose up -d
+# Start container (works on all systems)
+docker compose --profile cpu up -d
 
-# Verify GPU access
-docker exec -it jellyfin-hardened nvidia-smi
+# Access Jellyfin
+open http://localhost:8920
 ```
 
 ### Configuration
 
-1. Set your media path (choose one):
-   - Create `.env` file with `MEDIA_PATH=/path/to/your/media`
+1. **Set your media path** (choose one):
+   - Create `.env` file: `MEDIA_PATH=/path/to/your/media`
    - Set environment variable: `export MEDIA_PATH=/path/to/your/media`
    - Or use the default `./media` directory
-2. Adjust `JELLYFIN_UID` and `JELLYFIN_GID` build args in `docker-compose.yml` if needed to match your host user
 
-### Jellyfin Setup
+2. **Adjust user permissions** (optional):
+   - Edit `JELLYFIN_UID` and `JELLYFIN_GID` in `docker-compose.yml` to match your host UID/GID
+   - Default: 1000:1000
 
-1. Access web interface at `http://localhost:8920`
-2. Navigate to Dashboard > Playback > Transcoding
-3. Set Hardware Acceleration to "NVIDIA NVENC"
-4. Enable supported codecs
+3. **Access web interface** at `http://localhost:8920` and complete setup wizard
+
+## Security Validation
+
+Verify the security hardening is working:
+
+```bash
+# Verify container is NOT running as root
+docker exec jellyfin-hardened whoami
+# Expected: jellyfin
+
+# Verify media is read-only
+docker exec jellyfin-hardened touch /media/test.txt
+# Expected: "Read-only file system" error
+
+# Check file ownership
+docker exec jellyfin-hardened ls -la /config /cache /transcode
+# All should be owned by jellyfin:jellyfin (1000:1000)
+```
 
 ## Volume Structure
 
@@ -86,13 +83,43 @@ docker exec -it jellyfin-hardened nvidia-smi
 |--------|---------|
 | `/config` | Jellyfin configuration and database |
 | `/cache` | General cache data |
-| `/transcode` | Transcoding temporary files (benefits from fast storage) |
+| `/transcode` | Transcoding temporary files |
 | `/metadata` | Media metadata cache |
-| `/media` | Media library (read-only mount) |
+| `/media` | Media library (read-only) |
 
-## Security Hardening
+## Optional: GPU Acceleration
 
-- Runs as non-root user by default
-- Media mounted read-only
-- Minimal additional packages installed
-- Proper file permissions set at build time
+If you have an NVIDIA GPU and want hardware-accelerated transcoding:
+
+```bash
+# Start with GPU support (requires NVIDIA Container Toolkit)
+docker compose --profile gpu up -d
+
+# Verify GPU access
+docker exec jellyfin-hardened nvidia-smi
+```
+
+**Jellyfin GPU setup**:
+1. Dashboard > Playback > Transcoding
+2. Set Hardware Acceleration to "NVIDIA NVENC"
+3. Enable desired codecs
+
+---
+
+## Appendix: Supported Codecs
+
+### Video
+- H.264/AVC, H.265/HEVC, AV1, VP9, Theora
+
+### Audio
+- AAC, MP3, Opus, Vorbis
+
+### HDR & Advanced
+- HDR10/HDR10+, Dolby Vision passthrough, tone mapping
+
+### Subtitles
+- ASS/SSA, SRT, VTT with burn-in support (libass, FreeType)
+- CJK font support (Noto CJK)
+
+### Container Formats
+- MKV, MP4, WebM, AVI, and standard media containers

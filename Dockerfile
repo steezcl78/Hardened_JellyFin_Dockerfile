@@ -1,4 +1,5 @@
 # IT610 Midterm Project: Hardened Jellyfin Container
+# Security-focused Jellyfin with non-root execution and optional GPU support
 # Base: Official Jellyfin image (Debian-based)
 
 FROM jellyfin/jellyfin:latest
@@ -57,10 +58,10 @@ RUN mkdir -p /config /cache /transcode /metadata \
     && chmod 755 /config /cache /transcode /metadata
 
 # ============================================
-# 4. NVIDIA GPU ENVIRONMENT VARIABLES
+# 4. NVIDIA GPU SUPPORT (OPTIONAL)
 # ============================================
-ENV NVIDIA_DRIVER_CAPABILITIES=all
-ENV NVIDIA_VISIBLE_DEVICES=all
+# GPU environment variables are set in docker-compose.yml for the GPU profile only.
+# This keeps GPU support truly optional - container runs fine without NVIDIA.
 
 # ============================================
 # 5. EXPOSE PORTS

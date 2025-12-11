@@ -1,32 +1,47 @@
 # IT610 Midterm Project: Hardened Jellyfin Container
-# Docker Compose for running with NVIDIA GPU support
+# Security-focused Jellyfin deployment with non-root user execution
+#
+# Usage:
+#   Standard (no GPU):    docker compose --profile cpu up -d
+#   With GPU (optional):  docker compose --profile gpu up -d
+
+x-common: &common
+  build:
+    context: .
+    dockerfile: Dockerfile
+    args:
+      JELLYFIN_UID: 1000
+      JELLYFIN_GID: 1000
+  container_name: jellyfin-hardened
+  volumes:
+    # Configuration - persistent settings
+    - jellyfin-config:/config
+    # Cache - general cache data
+    - jellyfin-cache:/cache
+    # Transcode - separated for performance (can use fast storage)
+    - jellyfin-transcode:/transcode
+    # Metadata - separated for performance
+    - jellyfin-metadata:/metadata
+    # Media - your media library (set MEDIA_PATH in .env or environment)
+    - ${MEDIA_PATH:-./media}:/media:ro
+  ports:
+    - "8920:8096"       # Web interface (8920 on host -> 8096 in container)
+    - "7360:7359/udp"   # DLNA discovery (7360 to avoid reserved range)
+  restart: unless-stopped
 
 services:
   jellyfin:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        JELLYFIN_UID: 1000
-        JELLYFIN_GID: 1000
-    container_name: jellyfin-hardened
+    <<: *common
+    profiles:
+      - cpu
+
+  jellyfin-gpu:
+    <<: *common
+    profiles:
+      - gpu
     environment:
       - NVIDIA_DRIVER_CAPABILITIES=all
       - NVIDIA_VISIBLE_DEVICES=all
-    volumes:
-      # Configuration - persistent settings
-      - jellyfin-config:/config
-      # Cache - general cache data
-      - jellyfin-cache:/cache
-      # Transcode - separated for performance (can use fast storage)
-      - jellyfin-transcode:/transcode
-      # Metadata - separated for performance
-      - jellyfin-metadata:/metadata
-      # Media - your media library (set MEDIA_PATH in .env or environment)
-      - ${MEDIA_PATH:-./media}:/media:ro
-    ports:
-      - "8920:8096"       # Web interface (8920 on host -> 8096 in container)
-      - "7360:7359/udp"   # DLNA discovery (7360 to avoid reserved range)
     deploy:
       resources:
         reservations:
@@ -34,7 +49,6 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-    restart: unless-stopped
 
 volumes:
   jellyfin-config:
