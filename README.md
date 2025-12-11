@@ -1,110 +1,248 @@
-# IT610 Midterm Project: Hardened Jellyfin Container
+# IT610 Final Project: Hardened Jellyfin Container with Reverse Proxy
 
-A **security-hardened** Jellyfin Docker container that addresses security weaknesses in the official Jellyfin Docker image, with optional NVIDIA GPU acceleration.
+A **security-hardened** Jellyfin Docker container with **Nginx reverse proxy** for SSL termination, demonstrating multi-container orchestration and defense-in-depth security practices.
 
-## Project Rationale
+## Project Evolution
 
-The official Jellyfin Docker container runs as root by default and lacks proper security isolation. This project implements Systems Administration security best practices while maintaining full Jellyfin functionality.
+- **Midterm**: Security-hardened Jellyfin container (non-root execution, read-only mounts)
+- **Final**: Added Nginx reverse proxy for SSL/TLS, security headers, and network isolation
 
-## Security Hardening Features
+## Architecture
 
-1. **Non-root user execution** - Container runs as unprivileged `jellyfin` user (UID/GID 1000) instead of root
-2. **Read-only media mount** - Media library mounted read-only to prevent modification or tampering
-3. **Separated cache volumes** - Config, cache, transcode, and metadata isolated for security and performance
-4. **Minimal attack surface** - Only essential packages installed beyond base image
-5. **Proper file permissions** - All directories have appropriate ownership and permissions set at build time
-6. **Configurable UID/GID** - User namespace mapping configurable to match host user permissions
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        Docker Host                                   │
+│                                                                      │
+│    Internet/Browser                                                  │
+│          │                                                           │
+│          ▼                                                           │
+│    ┌─────────────────────────────────────────┐                      │
+│    │  Ports 80/443 (exposed to host)         │                      │
+│    └─────────────────────────────────────────┘                      │
+│          │                                                           │
+│          ▼                                                           │
+│    ┌─────────────────────────────────────────┐                      │
+│    │         Nginx Reverse Proxy             │                      │
+│    │  • SSL/TLS termination (HTTPS)          │                      │
+│    │  • Security headers injection           │                      │
+│    │  • HTTP → HTTPS redirect                │                      │
+│    │  • Hides backend server identity        │                      │
+│    └─────────────────┬───────────────────────┘                      │
+│                      │                                               │
+│              ┌───────▼────────┐                                      │
+│              │ jellyfin-net   │  (Internal Docker Network)           │
+│              │ (isolated)     │                                      │
+│              └───────┬────────┘                                      │
+│                      │                                               │
+│    ┌─────────────────▼───────────────────────┐                      │
+│    │        Jellyfin (hardened)              │                      │
+│    │  • Runs as non-root user                │                      │
+│    │  • Read-only media mount                │                      │
+│    │  • NOT exposed to host network          │                      │
+│    │  • Only accessible through Nginx        │                      │
+│    └─────────────────────────────────────────┘                      │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
-## Additional Features
+**Key security improvement**: Jellyfin is no longer directly accessible from outside Docker. All traffic must pass through the Nginx reverse proxy first.
 
-- **Comprehensive codec support** - H.264, HEVC/H.265, AV1, VP9, HDR10+, Dolby Vision, and subtitle rendering
-- **Optional NVIDIA GPU acceleration** - Hardware transcoding for systems with NVIDIA GPUs (not required)
-- **Cross-platform compatibility** - Runs on Linux, macOS, and Windows
+## Security Features
+
+### Container Hardening (Midterm)
+1. **Non-root user execution** - Container runs as unprivileged `jellyfin` user (UID/GID 1000)
+2. **Read-only media mount** - Media library cannot be modified from within container
+3. **Separated volumes** - Config, cache, transcode, and metadata isolated
+4. **Minimal packages** - Only essential packages installed
+
+### Network Security (Final)
+5. **SSL/TLS encryption** - All traffic encrypted via HTTPS (TLS 1.2/1.3 only)
+6. **Network isolation** - Jellyfin only accessible on internal Docker network
+7. **Security headers** - X-Frame-Options, X-Content-Type-Options, XSS protection
+8. **Server identity hidden** - Nginx version and Jellyfin identity not exposed
+9. **HTTP redirect** - All HTTP traffic automatically redirected to HTTPS
 
 ## Prerequisites
 
 ### Required
-- Docker Desktop with Docker Compose (v2.0 or newer)
+- Docker Desktop with Docker Compose (v2.0+)
+- OpenSSL (for generating SSL certificates)
 
-### Optional (for GPU acceleration only)
-- NVIDIA GPU (Maxwell architecture or newer)
-- NVIDIA drivers (v522.25 or newer)
-- NVIDIA Container Toolkit
-
-**Note**: GPU support is completely optional. The container runs perfectly fine with CPU-only transcoding.
+### Optional (GPU acceleration)
+- NVIDIA GPU + drivers + Container Toolkit
 
 ## Quick Start
 
+### 1. Generate SSL Certificates
+
+Self-signed certificates for local development:
+
 ```bash
-# Build the hardened image
-docker compose build
-
-# Start container (works on all systems)
-docker compose --profile cpu up -d
-
-# Access Jellyfin
-open http://localhost:8920
+cd nginx/ssl
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout key.pem -out cert.pem -config openssl.cnf
 ```
 
-### Configuration
+### 2. Configure Media Path
 
-1. **Set your media path** (choose one):
-   - Create `.env` file: `MEDIA_PATH=/path/to/your/media`
-   - Set environment variable: `export MEDIA_PATH=/path/to/your/media`
-   - Or use the default `./media` directory
+Create a `.env` file in the project root:
 
-2. **Adjust user permissions** (optional):
-   - Edit `JELLYFIN_UID` and `JELLYFIN_GID` in `docker-compose.yml` to match your host UID/GID
-   - Default: 1000:1000
+```bash
+echo "MEDIA_PATH=/path/to/your/media" > .env
+```
 
-3. **Access web interface** at `http://localhost:8920` and complete setup wizard
+### 3. Build and Run
+
+```bash
+# Build the hardened Jellyfin image
+docker compose build
+
+# Start all services (CPU profile)
+docker compose --profile cpu up -d
+
+# Or with GPU acceleration
+docker compose --profile gpu up -d
+```
+
+### 4. Access Jellyfin
+
+- **HTTPS**: https://localhost (recommended)
+- **HTTP**: http://localhost (auto-redirects to HTTPS)
+
+Your browser will warn about the self-signed certificate - this is expected. Click through the warning to proceed.
+
+## Commands Reference
+
+```bash
+# Build
+docker compose build
+
+# Start (choose one)
+docker compose --profile cpu up -d    # Without GPU
+docker compose --profile gpu up -d    # With NVIDIA GPU
+
+# Stop
+docker compose --profile cpu down
+docker compose --profile gpu down
+
+# View logs
+docker compose logs -f                # All services
+docker compose logs -f nginx          # Nginx only
+docker compose logs -f jellyfin       # Jellyfin only
+
+# Restart Nginx (after config changes)
+docker compose restart nginx
+```
 
 ## Security Validation
 
-Verify the security hardening is working:
+### Verify Container Security
 
 ```bash
-# Verify container is NOT running as root
+# Jellyfin running as non-root user
 docker exec jellyfin-hardened whoami
 # Expected: jellyfin
 
-# Verify media is read-only
+# Media is read-only
 docker exec jellyfin-hardened touch /media/test.txt
 # Expected: "Read-only file system" error
 
-# Check file ownership
-docker exec jellyfin-hardened ls -la /config /cache /transcode
-# All should be owned by jellyfin:jellyfin (1000:1000)
+# Verify file ownership
+docker exec jellyfin-hardened ls -la /config
+# Expected: owned by jellyfin:jellyfin
+```
+
+### Verify Network Isolation
+
+```bash
+# Jellyfin should NOT be accessible on port 8096 from host
+curl http://localhost:8096
+# Expected: Connection refused
+
+# Jellyfin IS accessible through Nginx
+curl -k https://localhost
+# Expected: Jellyfin response (HTML)
+```
+
+### Verify SSL/TLS
+
+```bash
+# Check SSL certificate
+openssl s_client -connect localhost:443 -servername localhost </dev/null 2>/dev/null | openssl x509 -noout -subject -dates
+
+# Check TLS version (should be 1.2 or 1.3)
+curl -kv https://localhost 2>&1 | grep "SSL connection"
+```
+
+### Verify Security Headers
+
+```bash
+curl -kI https://localhost 2>/dev/null | grep -E "^(X-Frame|X-Content|X-XSS|Referrer)"
+# Expected:
+# X-Frame-Options: SAMEORIGIN
+# X-Content-Type-Options: nosniff
+# X-XSS-Protection: 1; mode=block
+# Referrer-Policy: strict-origin-when-cross-origin
+```
+
+## File Structure
+
+```
+it610-midterm/
+├── Dockerfile              # Hardened Jellyfin image
+├── docker-compose.yml      # Multi-container orchestration
+├── nginx/
+│   ├── nginx.conf          # Reverse proxy configuration
+│   └── ssl/
+│       ├── openssl.cnf     # Certificate generation config
+│       ├── cert.pem        # SSL certificate (generated, gitignored)
+│       └── key.pem         # Private key (generated, gitignored)
+├── .env                    # Local config (gitignored)
+├── .gitignore
+└── README.md
 ```
 
 ## Volume Structure
 
-| Volume | Purpose |
-|--------|---------|
-| `/config` | Jellyfin configuration and database |
-| `/cache` | General cache data |
-| `/transcode` | Transcoding temporary files |
-| `/metadata` | Media metadata cache |
-| `/media` | Media library (read-only) |
+| Volume | Container Path | Purpose |
+|--------|----------------|---------|
+| jellyfin-config | /config | Jellyfin database and settings |
+| jellyfin-cache | /cache | General cache |
+| jellyfin-transcode | /transcode | Transcoding temp files |
+| jellyfin-metadata | /metadata | Media metadata |
+| (bind mount) | /media | Media library (read-only) |
+
+## Port Mapping
+
+| Host Port | Service | Purpose |
+|-----------|---------|---------|
+| 443 | Nginx | HTTPS (encrypted traffic) |
+| 80 | Nginx | HTTP (redirects to HTTPS) |
+| - | Jellyfin | Not exposed (internal only) |
 
 ## Optional: GPU Acceleration
 
-If you have an NVIDIA GPU and want hardware-accelerated transcoding:
-
 ```bash
-# Start with GPU support (requires NVIDIA Container Toolkit)
+# Start with GPU profile
 docker compose --profile gpu up -d
 
 # Verify GPU access
 docker exec jellyfin-hardened nvidia-smi
 ```
 
-**Jellyfin GPU setup**:
-1. Dashboard > Playback > Transcoding
-2. Set Hardware Acceleration to "NVIDIA NVENC"
-3. Enable desired codecs
+Configure in Jellyfin: Dashboard → Playback → Transcoding → Set to "NVIDIA NVENC"
 
 ---
+
+## Appendix: Nginx Security Headers Explained
+
+| Header | Purpose |
+|--------|---------|
+| `X-Frame-Options: SAMEORIGIN` | Prevents clickjacking - blocks other sites from embedding Jellyfin in an iframe |
+| `X-Content-Type-Options: nosniff` | Prevents MIME-type sniffing attacks |
+| `X-XSS-Protection: 1; mode=block` | Enables browser's XSS filter |
+| `Referrer-Policy` | Controls what URL info is sent to external sites |
+| `server_tokens off` | Hides Nginx version from headers and error pages |
 
 ## Appendix: Supported Codecs
 
@@ -114,12 +252,8 @@ docker exec jellyfin-hardened nvidia-smi
 ### Audio
 - AAC, MP3, Opus, Vorbis
 
-### HDR & Advanced
+### HDR
 - HDR10/HDR10+, Dolby Vision passthrough, tone mapping
 
 ### Subtitles
-- ASS/SSA, SRT, VTT with burn-in support (libass, FreeType)
-- CJK font support (Noto CJK)
-
-### Container Formats
-- MKV, MP4, WebM, AVI, and standard media containers
+- ASS/SSA, SRT, VTT with burn-in support

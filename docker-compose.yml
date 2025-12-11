@@ -1,9 +1,21 @@
-# IT610 Midterm Project: Hardened Jellyfin Container
-# Security-focused Jellyfin deployment with non-root user execution
+# IT610 Midterm/Final Project: Hardened Jellyfin Container with Reverse Proxy
+# Security-focused Jellyfin deployment with Nginx SSL termination
+#
+# Architecture:
+#   Internet → Nginx (443/HTTPS) → Internal Network → Jellyfin (8096)
+#   Jellyfin is NOT exposed to the host - only accessible through Nginx
 #
 # Usage:
 #   Standard (no GPU):    docker compose --profile cpu up -d
 #   With GPU (optional):  docker compose --profile gpu up -d
+#   Stop all:             docker compose --profile cpu down
+#                         docker compose --profile gpu down
+
+# ═══════════════════════════════════════════════════════════════════════════
+# YAML ANCHOR - Shared configuration for both Jellyfin profiles
+# ═══════════════════════════════════════════════════════════════════════════
+# This avoids duplicating the same settings for cpu and gpu versions.
+# The "&common" creates the anchor, "<<: *common" references it.
 
 x-common: &common
   build:
@@ -13,6 +25,8 @@ x-common: &common
       JELLYFIN_UID: 1000
       JELLYFIN_GID: 1000
   container_name: jellyfin-hardened
+  # NOTE: No "ports" section - Jellyfin is only accessible via the internal network
+  # This is a security improvement: Jellyfin cannot be reached directly from outside Docker
   volumes:
     # Configuration - persistent settings
     - jellyfin-config:/config
@@ -24,16 +38,68 @@ x-common: &common
     - jellyfin-metadata:/metadata
     # Media - your media library (set MEDIA_PATH in .env or environment)
     - ${MEDIA_PATH:-./media}:/media:ro
-  ports:
-    - "8920:8096"       # Web interface (8920 on host -> 8096 in container)
-    - "7360:7359/udp"   # DLNA discovery (7360 to avoid reserved range)
+  networks:
+    jellyfin-net:
+      # Network alias allows Nginx to find this container as "jellyfin"
+      # regardless of whether we're using the cpu or gpu profile.
+      # This is how Docker's internal DNS resolves service names.
+      aliases:
+        - jellyfin
   restart: unless-stopped
 
+# ═══════════════════════════════════════════════════════════════════════════
+# SERVICES
+# ═══════════════════════════════════════════════════════════════════════════
+
 services:
+  # ─────────────────────────────────────────────────────────────────────────
+  # NGINX REVERSE PROXY
+  # ─────────────────────────────────────────────────────────────────────────
+  # This is the ONLY service exposed to the outside world.
+  # All traffic must pass through Nginx before reaching Jellyfin.
+  #
+  # What it does:
+  # - Terminates SSL/TLS (handles encryption)
+  # - Adds security headers
+  # - Hides Jellyfin's identity
+  # - Redirects HTTP to HTTPS
+
+  nginx:
+    image: nginx:alpine
+    container_name: jellyfin-nginx
+    ports:
+      # HTTPS - encrypted web traffic (this is what users connect to)
+      - "443:443"
+      # HTTP - only used to redirect to HTTPS
+      - "80:80"
+    volumes:
+      # Nginx configuration (read-only - Nginx doesn't need to modify it)
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # SSL certificates (read-only)
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    networks:
+      - jellyfin-net
+    # NOTE: No depends_on here - Nginx starts independently and will retry
+    # connections to the "jellyfin" alias on the internal network.
+    # Both cpu and gpu Jellyfin profiles register under the "jellyfin" alias.
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # JELLYFIN (CPU Profile - No GPU)
+  # ─────────────────────────────────────────────────────────────────────────
+  # Use this profile on systems without an NVIDIA GPU (Mac, Linux, Windows without NVIDIA)
+  # Command: docker compose --profile cpu up -d
+
   jellyfin:
     <<: *common
     profiles:
       - cpu
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # JELLYFIN (GPU Profile - NVIDIA GPU Acceleration)
+  # ─────────────────────────────────────────────────────────────────────────
+  # Use this profile on systems with an NVIDIA GPU for hardware transcoding
+  # Command: docker compose --profile gpu up -d
 
   jellyfin-gpu:
     <<: *common
@@ -49,6 +115,29 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+
+# ═══════════════════════════════════════════════════════════════════════════
+# NETWORKS
+# ═══════════════════════════════════════════════════════════════════════════
+# Docker networks isolate container traffic. Containers on different networks
+# cannot communicate with each other.
+#
+# jellyfin-net is an INTERNAL network:
+# - Nginx and Jellyfin can talk to each other
+# - External traffic cannot reach Jellyfin directly
+# - Only Nginx's ports (80, 443) are exposed to the host
+
+networks:
+  jellyfin-net:
+    driver: bridge
+    # The "internal: true" option would completely isolate the network,
+    # but we need Nginx to accept external connections, so we leave it as bridge
+
+# ═══════════════════════════════════════════════════════════════════════════
+# VOLUMES
+# ═══════════════════════════════════════════════════════════════════════════
+# Named volumes persist data between container restarts.
+# Docker manages these volumes - they're stored in Docker's data directory.
 
 volumes:
   jellyfin-config:
