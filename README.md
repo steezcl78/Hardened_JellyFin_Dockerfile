@@ -67,12 +67,15 @@ docker exec -it jellyfin-hardened nvidia-smi
 
 ### Configuration
 
-1. Edit `docker-compose.yml` and update `/path/to/your/media` to your media location
-2. Adjust `JELLYFIN_UID` and `JELLYFIN_GID` build args if needed to match your host user
+1. Set your media path (choose one):
+   - Create `.env` file with `MEDIA_PATH=/path/to/your/media`
+   - Set environment variable: `export MEDIA_PATH=/path/to/your/media`
+   - Or use the default `./media` directory
+2. Adjust `JELLYFIN_UID` and `JELLYFIN_GID` build args in `docker-compose.yml` if needed to match your host user
 
 ### Jellyfin Setup
 
-1. Access web interface at `http://localhost:8096`
+1. Access web interface at `http://localhost:8920`
 2. Navigate to Dashboard > Playback > Transcoding
 3. Set Hardware Acceleration to "NVIDIA NVENC"
 4. Enable supported codecs

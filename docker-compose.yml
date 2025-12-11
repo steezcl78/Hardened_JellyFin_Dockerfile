@@ -22,8 +22,8 @@ services:
       - jellyfin-transcode:/transcode
       # Metadata - separated for performance
       - jellyfin-metadata:/metadata
-      # Media - your media library
-      - D:\Movies:/media:ro
+      # Media - your media library (set MEDIA_PATH in .env or environment)
+      - ${MEDIA_PATH:-./media}:/media:ro
     ports:
       - "8920:8096"       # Web interface (8920 on host -> 8096 in container)
       - "7360:7359/udp"   # DLNA discovery (7360 to avoid reserved range)
