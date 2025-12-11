@@ -15,46 +15,29 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libva-drm2 \
     libva2 \
     mesa-va-drivers \
-    # OpenCL support (tone mapping, HDR processing)
-    ocl-icd-libopencl1 \
     # Vulkan support (modern GPU acceleration)
     libvulkan1 \
     mesa-vulkan-drivers \
-    # Font rendering for subtitles (ASS/SSA, SRT, etc.)
-    fontconfig \
-    fonts-dejavu-core \
+    # Additional fonts for subtitles
     fonts-liberation \
     fonts-noto-core \
-    fonts-noto-cjk \
-    # FreeType for subtitle burn-in
-    libfreetype6 \
+    # Text shaping for subtitles
     libfribidi0 \
     libharfbuzz0b \
-    # Subtitle support
     libass9 \
     # Additional media libraries
     libdrm2 \
-    libopus0 \
-    libvorbis0a \
-    libvorbisenc2 \
     libtheora0 \
     libx264-dev \
     libx265-dev \
     libvpx-dev \
     libdav1d-dev \
     libaom3 \
-    # BluRay/DVD support
-    libbluray2 \
-    # Image formats (album art, thumbnails)
-    libwebp7 \
+    # Image formats
     libjpeg62-turbo \
     libpng16-16 \
     # Audio codecs
-    libmp3lame0 \
     libopusenc0 \
-    # OpenSSL for secure streams
-    openssl \
-    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # ============================================
