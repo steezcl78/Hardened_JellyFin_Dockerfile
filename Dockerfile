@@ -14,7 +14,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # VA-API drivers (hardware acceleration fallback)
     libva-drm2 \
     libva2 \
-    i965-va-driver \
     mesa-va-drivers \
     # OpenCL support (tone mapping, HDR processing)
     ocl-icd-libopencl1 \
