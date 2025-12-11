@@ -1,0 +1,43 @@
+# IT610 Midterm Project: Hardened Jellyfin Container
+# Docker Compose for running with NVIDIA GPU support
+
+services:
+  jellyfin:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        JELLYFIN_UID: 1000
+        JELLYFIN_GID: 1000
+    container_name: jellyfin-hardened
+    environment:
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - NVIDIA_VISIBLE_DEVICES=all
+    volumes:
+      # Configuration - persistent settings
+      - jellyfin-config:/config
+      # Cache - general cache data
+      - jellyfin-cache:/cache
+      # Transcode - separated for performance (can use fast storage)
+      - jellyfin-transcode:/transcode
+      # Metadata - separated for performance
+      - jellyfin-metadata:/metadata
+      # Media - your media library
+      - D:\Movies:/media:ro
+    ports:
+      - "8920:8096"       # Web interface (8920 on host -> 8096 in container)
+      - "7360:7359/udp"   # DLNA discovery (7360 to avoid reserved range)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+
+volumes:
+  jellyfin-config:
+  jellyfin-cache:
+  jellyfin-transcode:
+  jellyfin-metadata:
